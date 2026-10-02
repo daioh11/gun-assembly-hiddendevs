@@ -37,7 +37,7 @@ gatherGunAssemblyData()
 
 RunService.Heartbeat:Connect(function()
     if not gunParts then return end
-
+    --TODO optimize it, maybe im gonna add dt fraction later
     for _, part in ipairs(gunParts) do
         for _, slot in ipairs(partSlots) do
             if (part:GetPivot().Position - slot.Position).Magnitude < SNAP_RADIUS then
