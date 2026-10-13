@@ -8,7 +8,7 @@ local slots: { BasePart}  = {}
 
 local occupiedSlots = {}
 
-local SNAP_RADIUS = 3 
+local SNAP_RADIUS = 7 
 
 
 -- collecting gun parts and part slots 
@@ -47,7 +47,8 @@ RunService.Heartbeat:Connect(function()
             local slotPos = slot.Position
             
             if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- magnitude of vector from slotPos to piecePos
-                piece:PivotTo(CFrame.new(slotPos) * pieceRot) -- keeping the original rotation
+                local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
+                piece:PivotTo(targetCframe + Vector3.new(0, 2, 0)) -- slightly above slot to aboid overlapping
             end
         end
 
