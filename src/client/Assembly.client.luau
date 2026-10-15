@@ -57,9 +57,13 @@ end
 
 collectObjects()
 
+local isAssembled
+
 RunService.Heartbeat:Connect(function()
     if #gunComponents == 0 then return end
     local currentlySnapped = {}
+    local currentOccupiedCount = 0 -- tracking ouccpied slots size
+    
 
     for _, piece in ipairs(gunComponents) do
         for _, slot in ipairs(slots) do
@@ -86,14 +90,29 @@ RunService.Heartbeat:Connect(function()
         if currentlySnapped[slot] then
             --saving occupied slots
             occupiedSlots[slot] = currentlySnapped[slot]
+            currentOccupiedCount += 1
         else
             --cleaning up
             occupiedSlots[slot] = nil
         end
     end
+
+    
+    if currentOccupiedCount >= #slots then
+        isAssembled = true
+        print("GUN ASSEMBLED!")
+    else
+        isAssembled = false
+    end
+
 end)
 
+
+
+
+--[[
 while true do
     task.wait(3)
-    warn(occupiedSlots)
+    warn(slots)
 end
+--]]
