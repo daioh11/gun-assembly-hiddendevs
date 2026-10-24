@@ -54,12 +54,12 @@ local function onDragStart(gunPiece: Model)
 		tween:Cancel() -- cancel function also causes Completed event on tweens
 	end
 
-    for slot, occupiedPiece in pairs(occupiedSlots) do
-        if occupiedPiece == gunPiece then
-            occupiedSlots[slot] = nil
-        end
-    end
-    warn(occupiedSlots)
+    -- if piece which we started to drag were in slot we free up this slot
+	for slot, occupiedPiece in pairs(occupiedSlots) do
+		if occupiedPiece == gunPiece then
+			occupiedSlots[slot] = nil
+		end
+	end
 end
 
 local function onDragEnd(gunPiece: Model) -- called when gun piece released from mouse
@@ -74,18 +74,19 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 
 		local slotPos = slot.Position
 
-		--TODO make it check whether i stopped hovering over the gun piece
-		if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
-			occupiedSlots[slot] = gunPiece
+		if not occupiedSlots[slot] then --safe check to avoid stacking pieces on top of each other
+			if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
+				occupiedSlots[slot] = gunPiece
+                warn("new piece: " .. gunPiece.Name .. " in slot: " .. slot.Name)
 
-			local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
-			--gunPiece:PivotTo(targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
-			tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
-			break --breaking slot loop cuz its occupied now
+				local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
+				tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
+				break --breaking slot loop cuz its occupied now
+			end
 		end
 	end
 
-    local currentOccupiedCount = 0 -- tracking ouccpied slots size
+	local currentOccupiedCount = 0 -- tracking ouccpied slots size
 	for _, slot in ipairs(slots) do
 		if occupiedSlots[slot] then
 			currentOccupiedCount += 1
@@ -97,7 +98,7 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		print("GUN ASSEMBLED!")
 	else
 		isAssembled = false
-        print("GUn IS NOT ASSEMbLED")
+		print("GUn IS NOT ASSEMbLED")
 	end
 end
 
@@ -107,11 +108,6 @@ local function setupGunComponent(gunPiece: Model)
 		if part:IsA("BasePart") then
 			part.Anchored = true
 		end
-	end
-
-	-- checking for primary part
-	if not gunPiece.PrimaryPart then
-		warn("Gun Component does not have a Primary Part inside: " .. gunPiece.Name)
 	end
 
 	--checking for drag detector
