@@ -12,15 +12,12 @@ local SNAP_RADIUS: number = 5
 
 local function verifyAssembly()
 	for slot, piece in occupiedSlots do
-		if slot:GetAttribute("ComponentType") == piece:GetAttribute("ComponentType") then
-			return true
-		else
+		if not (slot:GetAttribute("ComponentType") == piece:GetAttribute("ComponentType")) then
 			return false
 		end
 	end
-	return false
+	return true
 end
-
 
 local activeGunTweens: { [Model]: Tween } = {} -- tracking tweens for gun pieces
 local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapping a piece
@@ -62,7 +59,7 @@ local function onDragStart(gunPiece: Model)
 		tween:Cancel() -- cancel function also causes Completed event on tweens
 	end
 
-    -- if piece which we started to drag were in slot we free up this slot
+	-- if piece which we started to drag were in slot we free up this slot
 	for slot, occupiedPiece in pairs(occupiedSlots) do
 		if occupiedPiece == gunPiece then
 			occupiedSlots[slot] = nil
@@ -75,19 +72,24 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		return
 	end
 
-	for _, slot in ipairs(slots) do
-		--pieces are Model so we use GetPivot to get a CFrame
+	--pieces are Model so we use GetPivot to get a CFrame
 		local piecePos = gunPiece:GetPivot().Position
 		local pieceRot = gunPiece:GetPivot().Rotation
 
+	for _, slot in ipairs(slots) do
 		local slotPos = slot.Position
 
+		local highlight = slot:FindFirstChildOfClass("Highlight")
 		if not occupiedSlots[slot] then --safe check to avoid stacking pieces on top of each other
 			if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
 				occupiedSlots[slot] = gunPiece
 
 				local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
 				tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
+
+				if highlight then
+					highlight.Enabled = false
+				end
 				break --breaking slot loop cuz its occupied now
 			end
 		end
@@ -100,11 +102,35 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		end
 	end
 
-	if currentOccupiedCount >= #slots then	
+	if currentOccupiedCount >= #slots then
 		if verifyAssembly() then
-			warn("Gun assembled correctly")
+			print("Gun assembled correctly")
 		else
-			warn("Gun assembled incorrectly")
+			print("Gun assembled incorrectly")
+		end
+	end
+end
+
+local function onDragContinue(gunPiece: Model) --called every frame on piece dragging
+	local piecePos = gunPiece:GetPivot().Position
+
+	for _, slot in ipairs(slots) do
+		
+
+		local slotPos = slot.Position
+
+		local highlight = slot:FindFirstChildOfClass("Highlight")
+		if highlight then
+			if not occupiedSlots[slot] then
+				if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
+					highlight.Enabled = true
+				--TODO find near slot func	
+				else
+					highlight.Enabled = false
+				end
+			else
+				highlight.Enabled = false
+			end
 		end
 	end
 end
@@ -137,15 +163,23 @@ local function setupGunComponent(gunPiece: Model)
 	dragDetector.DragStart:Connect(function()
 		onDragStart(gunPiece)
 	end)
+
+	dragDetector.DragContinue:Connect(function()
+		onDragContinue(gunPiece)
+	end)
 end
 
 local function setupGunSlot(slot: BasePart)
 	slot.Anchored = true -- for safety anchoring and setting cant collide
 	slot.CanCollide = false
 
-
 	if not slot:GetAttribute("ComponentType") then
 		warn("Slot for gun component does not have an attribute ComponentType: " .. slot.Name)
+	end
+
+	--checking if has highlight object
+	if not slot:FindFirstChildOfClass("Highlight") then
+		warn("Slot for gun component does not have a Highlight object inside: " .. slot.Name)
 	end
 end
 -- collecting gun parts and part slots
