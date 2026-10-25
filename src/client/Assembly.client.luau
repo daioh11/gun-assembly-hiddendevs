@@ -6,16 +6,24 @@ local assemblyBench = workspace:WaitForChild("AssemblyBench") :: BasePart
 
 local gunComponents: { Model } = {} -- models of gun components like recevier, barrel etc.
 local slots: { BasePart } = {} -- slots for gun compoaents to snap to
-
 local occupiedSlots: { [BasePart]: Model } = {}
 
 local SNAP_RADIUS: number = 5
 
-local isAssembled: boolean = false
+local function verifyAssembly()
+	for slot, piece in occupiedSlots do
+		if slot:GetAttribute("ComponentType") == piece:GetAttribute("ComponentType") then
+			return true
+		else
+			return false
+		end
+	end
+	return false
+end
+
 
 local activeGunTweens: { [Model]: Tween } = {} -- tracking tweens for gun pieces
-
-local function tweenGunPiece(piece: Model, targetCFrame: CFrame)
+local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapping a piece
 	if activeGunTweens[piece] then
 		activeGunTweens[piece]:Cancel() -- cancel tween if it already started
 	end
@@ -77,7 +85,6 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		if not occupiedSlots[slot] then --safe check to avoid stacking pieces on top of each other
 			if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
 				occupiedSlots[slot] = gunPiece
-                warn("new piece: " .. gunPiece.Name .. " in slot: " .. slot.Name)
 
 				local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
 				tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
@@ -93,16 +100,20 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		end
 	end
 
-	if currentOccupiedCount >= #slots then
-		isAssembled = true
-		print("GUN ASSEMBLED!")
-	else
-		isAssembled = false
-		print("GUn IS NOT ASSEMbLED")
+	if currentOccupiedCount >= #slots then	
+		if verifyAssembly() then
+			warn("Gun assembled correctly")
+		else
+			warn("Gun assembled incorrectly")
+		end
 	end
 end
 
 local function setupGunComponent(gunPiece: Model)
+	if not gunPiece:GetAttribute("ComponentType") then
+		warn("Gun Component does not have an attribute ComponentType: " .. gunPiece.Name)
+	end
+
 	--checking if all parts are anchored ()
 	for _, part in ipairs(gunPiece:GetDescendants()) do
 		if part:IsA("BasePart") then
@@ -128,6 +139,15 @@ local function setupGunComponent(gunPiece: Model)
 	end)
 end
 
+local function setupGunSlot(slot: BasePart)
+	slot.Anchored = true -- for safety anchoring and setting cant collide
+	slot.CanCollide = false
+
+
+	if not slot:GetAttribute("ComponentType") then
+		warn("Slot for gun component does not have an attribute ComponentType: " .. slot.Name)
+	end
+end
 -- collecting gun parts and part slots
 local function setupAllObjects()
 	for _, gunPiece in partsFolder:GetDescendants() do
@@ -139,8 +159,7 @@ local function setupAllObjects()
 	end
 	for _, slot in assemblyBench:GetDescendants() do
 		if slot:IsA("BasePart") then
-			slot.Anchored = true -- for safety anchoring and setting cant collide
-			slot.CanCollide = false
+			setupGunSlot(slot)
 			table.insert(slots, slot)
 		end
 	end
