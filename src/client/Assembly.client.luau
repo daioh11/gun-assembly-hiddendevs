@@ -6,11 +6,11 @@ local assemblyBench = workspace:WaitForChild("AssemblyBench") :: BasePart
 
 local gunComponents: { Model } = {} -- models of gun components like recevier, barrel etc.
 local slots: { BasePart } = {} -- slots for gun compoaents to snap to
-local occupiedSlots: { [BasePart]: Model } = {}
+local occupiedSlots: { [BasePart]: Model } = {} -- slots occupied by snapped gun components
 
 local SNAP_RADIUS: number = 5
 
-local function verifyAssembly()
+local function verifyAssembly(): boolean
 	for slot, piece in occupiedSlots do
 		if not (slot:GetAttribute("ComponentType") == piece:GetAttribute("ComponentType")) then
 			return false
@@ -18,6 +18,26 @@ local function verifyAssembly()
 	end
 	return true
 end
+
+-- stopwatch logic 
+
+local startedAt = nil
+
+local function startStopwatch()
+	if startedAt then return end -- if not nil it means already started so we returning to not overwrite
+	print("the clock has started")
+	startedAt = os.clock() --saving time
+end
+
+local function stopAndGetStopwatch()
+	if not startedAt then return nil end -- if not started then we just return nil
+
+	local elapsed = os.clock() - startedAt -- elapsed time from start
+	startedAt = nil --cleanuo
+	return elapsed
+end
+
+
 
 local activeGunTweens: { [Model]: Tween } = {} -- tracking tweens for gun pieces
 local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapping a piece
@@ -46,13 +66,39 @@ local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapp
 	end)
 
 	tween:Play()
-	return tween
 end
 
+local function getClosestGunSlot(gunPiece: Model, searchRadius: number): BasePart?
+	--pieces are Model so we use GetPivot to get a cframe
+	local piecePos = gunPiece:GetPivot().Position
+	local closestSlot = nil
+	local closestDistance = searchRadius
+
+	for _, slot in ipairs(slots) do
+		if occupiedSlots[slot] then
+			continue -- we skipping occupied slots
+		end
+
+		local distance = (piecePos - slot.Position).Magnitude -- distance between piece pos and slot pos
+		if distance < closestDistance then -- updating variables if we found slot in radius
+			closestDistance = distance
+			closestSlot = slot
+		end
+	end
+
+	return closestSlot
+end
+
+local slotHighlights: {} = {} -- storing highlight objects for slots
+
 local function onDragStart(gunPiece: Model)
-	if #gunComponents == 0 or #slots == 0 then
+	if #gunComponents == 0 or #slots == 0 then --safe check if data hasnt initialized yet
 		return
-	end --safe check if data hasnt initialized yet
+	end
+
+	if next(occupiedSlots) == nil then --verifying assembly bench is empty ("next" func cuz occupiedSlots is a dict)
+		startStopwatch() --starting time
+	end
 	-- canceling tween if we started to drag a piece which is already tweening
 	local tween = activeGunTweens[gunPiece]
 	if tween then
@@ -60,7 +106,7 @@ local function onDragStart(gunPiece: Model)
 	end
 
 	-- if piece which we started to drag were in slot we free up this slot
-	for slot, occupiedPiece in pairs(occupiedSlots) do
+	for slot, occupiedPiece in occupiedSlots do
 		if occupiedPiece == gunPiece then
 			occupiedSlots[slot] = nil
 		end
@@ -72,27 +118,18 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 		return
 	end
 
-	--pieces are Model so we use GetPivot to get a CFrame
-		local piecePos = gunPiece:GetPivot().Position
-		local pieceRot = gunPiece:GetPivot().Rotation
+	for _, highlight in slotHighlights do -- disabling all highlights
+		highlight.Enabled = false
+	end
 
-	for _, slot in ipairs(slots) do
-		local slotPos = slot.Position
+	local closesSlot = getClosestGunSlot(gunPiece, SNAP_RADIUS)
 
-		local highlight = slot:FindFirstChildOfClass("Highlight")
-		if not occupiedSlots[slot] then --safe check to avoid stacking pieces on top of each other
-			if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
-				occupiedSlots[slot] = gunPiece
+	if closesSlot then
+		occupiedSlots[closesSlot] = gunPiece --assigning gun piece to closest slot
 
-				local targetCframe = CFrame.new(slotPos) * pieceRot -- keeping the original rotation
-				tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
+		local targetCframe = CFrame.new(closesSlot.Position) * gunPiece:GetPivot().Rotation -- keeping the original rotation
 
-				if highlight then
-					highlight.Enabled = false
-				end
-				break --breaking slot loop cuz its occupied now
-			end
-		end
+		tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
 	end
 
 	local currentOccupiedCount = 0 -- tracking ouccpied slots size
@@ -105,6 +142,8 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 	if currentOccupiedCount >= #slots then
 		if verifyAssembly() then
 			print("Gun assembled correctly")
+			local time = stopAndGetStopwatch() -- stopping and saving stopwatch time
+			print(string.format("Gun assembled in %.2f seconds", time))
 		else
 			print("Gun assembled incorrectly")
 		end
@@ -112,25 +151,13 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 end
 
 local function onDragContinue(gunPiece: Model) --called every frame on piece dragging
-	local piecePos = gunPiece:GetPivot().Position
+	local closestSlot = getClosestGunSlot(gunPiece, SNAP_RADIUS) -- getting closest slto
 
-	for _, slot in ipairs(slots) do
-		
-
-		local slotPos = slot.Position
-
-		local highlight = slot:FindFirstChildOfClass("Highlight")
-		if highlight then
-			if not occupiedSlots[slot] then
-				if (piecePos - slotPos).Magnitude < SNAP_RADIUS then -- distance from slotPos to piecePos
-					highlight.Enabled = true
-				--TODO find near slot func	
-				else
-					highlight.Enabled = false
-				end
-			else
-				highlight.Enabled = false
-			end
+	for slot, highlight in slotHighlights do
+		if closestSlot == slot then --checking if we are nearby a closest slot
+			highlight.Enabled = true
+		else
+			highlight.Enabled = false
 		end
 	end
 end
@@ -180,8 +207,12 @@ local function setupGunSlot(slot: BasePart)
 	--checking if has highlight object
 	if not slot:FindFirstChildOfClass("Highlight") then
 		warn("Slot for gun component does not have a Highlight object inside: " .. slot.Name)
+		return
 	end
+
+	slotHighlights[slot] = slot:FindFirstChildOfClass("Highlight") -- storing highlights for each slot
 end
+
 -- collecting gun parts and part slots
 local function setupAllObjects()
 	for _, gunPiece in partsFolder:GetDescendants() do
