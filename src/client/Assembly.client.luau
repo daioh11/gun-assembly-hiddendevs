@@ -1,3 +1,7 @@
+-- Connected Discord-GitHub
+
+-- gun assembly script where you drag a gun components in slots 
+
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local partsFolder = workspace:WaitForChild("GunParts") :: Folder
@@ -10,7 +14,7 @@ local occupiedSlots: { [BasePart]: Model } = {} -- slots occupied by snapped gun
 
 local SNAP_RADIUS: number = 5
 
-local function verifyAssembly(): boolean
+local function verifyAssembly(): boolean--correctness of assembly by checking ComponentType attribute
 	for slot, piece in occupiedSlots do
 		if not (slot:GetAttribute("ComponentType") == piece:GetAttribute("ComponentType")) then
 			return false
@@ -163,7 +167,7 @@ local function onDragContinue(gunPiece: Model) --called every frame on piece dra
 end
 
 local function setupGunComponent(gunPiece: Model)
-	if not gunPiece:GetAttribute("ComponentType") then
+	if not gunPiece:GetAttribute("ComponentType") then -- checking for a custom attribute
 		warn("Gun Component does not have an attribute ComponentType: " .. gunPiece.Name)
 	end
 
@@ -187,11 +191,11 @@ local function setupGunComponent(gunPiece: Model)
 		onDragEnd(gunPiece)
 	end)
 
-	dragDetector.DragStart:Connect(function()
+	dragDetector.DragStart:Connect(function() -- connecting a function on start of mouse drag
 		onDragStart(gunPiece)
 	end)
 
-	dragDetector.DragContinue:Connect(function()
+	dragDetector.DragContinue:Connect(function() -- connecting a function on every frame of mouse dragging 
 		onDragContinue(gunPiece)
 	end)
 end
@@ -215,17 +219,17 @@ end
 
 -- collecting gun parts and part slots
 local function setupAllObjects()
-	for _, gunPiece in partsFolder:GetDescendants() do
-		if gunPiece:IsA("Model") then
+	for _, gunPiece in partsFolder:GetDescendants() do 
+		if gunPiece:IsA("Model") then--checking type of every gun component
 			print("Found Gun Component: " .. gunPiece.Name)
 			setupGunComponent(gunPiece)
-			table.insert(gunComponents, gunPiece)
+			table.insert(gunComponents, gunPiece) --saving them in table
 		end
 	end
 	for _, slot in assemblyBench:GetDescendants() do
-		if slot:IsA("BasePart") then
+		if slot:IsA("BasePart") then --checking type for slots
 			setupGunSlot(slot)
-			table.insert(slots, slot)
+			table.insert(slots, slot) -- saving them in table
 		end
 	end
 
