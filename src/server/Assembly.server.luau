@@ -1,8 +1,10 @@
 -- Connected Discord-GitHub
 
 -- gun assembly script where you drag a gun components in slots 
+-- despite client logic its a server script for leaderstats working
 
-local RunService = game:GetService("RunService")
+
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local partsFolder = workspace:WaitForChild("GunParts") :: Folder
 
@@ -41,6 +43,34 @@ local function stopAndGetStopwatch()
 	return elapsed
 end
 
+
+--leaderstats logic
+
+Players.PlayerAdded:Connect(function(player) -- this function called on spawning a player
+    local leaderstats = Instance.new("Folder") --creating a leaderstats instance to track records
+    leaderstats.Name = "leaderstats"
+    leaderstats.Parent = player
+
+    local bestTimeVal = Instance.new("NumberValue") -- creating a stat in Tab menu
+    bestTimeVal.Name = "Best Time" 
+    bestTimeVal.Value = 0 
+    bestTimeVal.Parent = leaderstats
+end)
+
+
+local function updateBestTime(player, newTime: number) -- function for updating record time
+    local leaderstats = player:FindFirstChild("leaderstats") --checking for leaderstats instancae
+    if not leaderstats then return end
+    
+    local bestTimeVal = leaderstats:FindFirstChild("Best Time") --checking for best time 
+    if not bestTimeVal then return end
+
+    -- checking if its a first assembly or new time is lower then current
+    if bestTimeVal.Value == 0 or newTime < bestTimeVal.Value then
+        bestTimeVal.Value = tonumber(string.format("%.2f", newTime)) -- rounding score to 2 decimal places
+        print(string.format("New personal record: %.2f sec", bestTimeVal.Value)) -- printing rounded score 
+    end
+end
 
 
 local activeGunTweens: { [Model]: Tween } = {} -- tracking tweens for gun pieces
@@ -100,7 +130,7 @@ local function onDragStart(gunPiece: Model)
 		return
 	end
 
-	if next(occupiedSlots) == nil then --verifying assembly bench is empty ("next" func cuz occupiedSlots is a dict)
+	if next(occupiedSlots) == nil then -- !!! starting stopwatch again only if bench is empty          ("next" func cuz occupiedSlots is a dict)
 		startStopwatch() --starting time
 	end
 	-- canceling tween if we started to drag a piece which is already tweening
@@ -117,7 +147,7 @@ local function onDragStart(gunPiece: Model)
 	end
 end
 
-local function onDragEnd(gunPiece: Model) -- called when gun piece released from mouse
+local function onDragEnd(player, gunPiece: Model) -- called when gun piece released from mouse
 	if #gunComponents == 0 or #slots == 0 then
 		return
 	end
@@ -146,8 +176,14 @@ local function onDragEnd(gunPiece: Model) -- called when gun piece released from
 	if currentOccupiedCount >= #slots then
 		if verifyAssembly() then
 			print("Gun assembled correctly")
-			local time = stopAndGetStopwatch() -- stopping and saving stopwatch time
-			print(string.format("Gun assembled in %.2f seconds", time))
+			local time = stopAndGetStopwatch() -- stopping and saving stopwatch time	
+
+			if time then -- if time is nil it means assembly didnt start yet
+				print(string.format("Gun assembled in %.2f seconds", time)) --rounding second to 2 decimal places
+
+				updateBestTime(player, time) --updating record
+
+			end
 		else
 			print("Gun assembled incorrectly")
 		end
@@ -187,8 +223,8 @@ local function setupGunComponent(gunPiece: Model)
 
 	--setting up drag detector
 	dragDetector.ResponseStyle = Enum.DragDetectorResponseStyle.Geometric -- setting Gemotric cuz otherwise it will not work with anchored objects
-	dragDetector.DragEnd:Connect(function() -- connecting a helper function on end of mouse drag
-		onDragEnd(gunPiece)
+	dragDetector.DragEnd:Connect(function(player) -- connecting a helper function on end of mouse drag
+		onDragEnd(player, gunPiece) --also passing player for updating records
 	end)
 
 	dragDetector.DragStart:Connect(function() -- connecting a function on start of mouse drag
@@ -243,3 +279,5 @@ local function setupAllObjects()
 end
 
 setupAllObjects() -- collecting all objects
+
+
