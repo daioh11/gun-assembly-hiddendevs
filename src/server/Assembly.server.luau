@@ -1,24 +1,17 @@
 -- Connected Discord-GitHub
 
--- gun assembly script where you drag a gun components in slots 
+-- gun assembly script where you drag a gun components in slots
 -- despite client logic its a server script for leaderstats working
-
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 
-local gunComponents: { Model } = {} -- models of gun components like recevier, barrel etc.
-local slots: { BasePart } = {} -- slots for gun compoaents to snap to
-local occupiedSlots: { [BasePart]: Model } = {} -- slots occupied by snapped gun components
-
 local SNAP_RADIUS: number = 5
 
 --tags for searching objects
-local PART_TAG: string = "GunPart" 
-local SLOT_TAG: string = "GunSlot"	
-
-
+local PART_TAG: string = "GunPart"
+local SLOT_TAG: string = "GunSlot"
 
 local activeGunTweens: { [Model]: Tween } = {} -- tracking tweens for gun pieces
 local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapping a piece
@@ -49,63 +42,44 @@ local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapp
 	tween:Play()
 end
 
--- stopwatch logic 
-
-local startedAt = nil
-
-local function startStopwatch()
-	if startedAt then return end -- if not nil it means already started so we returning to not overwrite
-	print("the clock has started")
-	startedAt = os.clock() --saving time
-end
-
-local function stopAndGetStopwatch()
-	if not startedAt then return nil end -- if not started then we just return nil
-
-	local elapsed = os.clock() - startedAt -- elapsed time from start
-	startedAt = nil --cleanuo
-	return elapsed
-end
-
-
-
 --leaderstats logic
 
 Players.PlayerAdded:Connect(function(player) -- this function called on spawning a player
-    local leaderstats = Instance.new("Folder") --creating a leaderstats instance to track records
-    leaderstats.Name = "leaderstats"
-    leaderstats.Parent = player
+	local leaderstats = Instance.new("Folder") --creating a leaderstats instance to track records
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
 
-    local bestTimeVal = Instance.new("NumberValue") -- creating a stat in Tab menu
-    bestTimeVal.Name = "Best Time" 
-    bestTimeVal.Value = 0 
-    bestTimeVal.Parent = leaderstats
+	local bestTimeVal = Instance.new("NumberValue") -- creating a stat in Tab menu
+	bestTimeVal.Name = "Best Time"
+	bestTimeVal.Value = 0
+	bestTimeVal.Parent = leaderstats
 end)
 
-
 local function updateBestTime(player, newTime: number) -- function for updating record time
-    local leaderstats = player:FindFirstChild("leaderstats") --checking for leaderstats instancae
-    if not leaderstats then return end
-    
-    local bestTimeVal = leaderstats:FindFirstChild("Best Time") --checking for best time 
-    if not bestTimeVal then return end
+	local leaderstats = player:FindFirstChild("leaderstats") --checking for leaderstats instancae
+	if not leaderstats then
+		return
+	end
 
-    -- checking if its a first assembly or new time is lower then current
-    if bestTimeVal.Value == 0 or newTime < bestTimeVal.Value then
-        bestTimeVal.Value = tonumber(string.format("%.2f", newTime)) -- rounding score to 2 decimal places
-        print(string.format("New personal record: %.2f sec", bestTimeVal.Value)) -- printing rounded score 
-    end
+	local bestTimeVal = leaderstats:FindFirstChild("Best Time") --checking for best time
+	if not bestTimeVal then
+		return
+	end
+
+	-- checking if its a first assembly or new time is lower then current
+	if bestTimeVal.Value == 0 or newTime < bestTimeVal.Value then
+		bestTimeVal.Value = tonumber(string.format("%.2f", newTime)) -- rounding score to 2 decimal places
+		print(string.format("New personal record: %.2f sec", bestTimeVal.Value)) -- printing rounded score
+	end
 end
-
 
 -- ASSEMBlY BENCH
 
 local AssemblyBench = {}
-AssemblyBench.__index = AssemblyBench  -- failed lookups on an object fall through to this table
+AssemblyBench.__index = AssemblyBench -- failed lookups on an object fall through to this table
 
-function AssemblyBench.new(slots) 
+function AssemblyBench.new(slots)
 	local highlights: { [BasePart]: Highlight } = {}
-
 
 	for _, slot in slots do
 		-- anchored and non-collidable so pieces dropped near a slot are not pushed away by it
@@ -131,9 +105,9 @@ function AssemblyBench.new(slots)
 		highlights = highlights,
 		occupied = {},
 		occupiedCount = 0,
+		startedAt = nil, -- os.clock() value at the start of the run, nil while no run is active
+		assembler = nil, -- player who started the run
 	}, AssemblyBench)
-
-
 end
 
 function AssemblyBench.FindClosestSlot(self, piece: Model): BasePart?
@@ -150,13 +124,12 @@ function AssemblyBench.FindClosestSlot(self, piece: Model): BasePart?
 		local distance = (piecePos - slot.Position).Magnitude
 		if distance < closestDistance then
 			closestDistance = distance
-			closestSlot = slot	
+			closestSlot = slot
 		end
 	end
 
 	return closestSlot
 end
-
 
 function AssemblyBench.UpdateHighlights(self, closestSlot: BasePart?)
 	--only the closest slot is lit
@@ -198,10 +171,44 @@ function AssemblyBench.VerifyAssembly(self): boolean
 	return true
 end
 
-function AssemblyBench.OnDragStart(self, piece: Model)
+function AssemblyBench.BeginRun(self, player: Player)
+	if self.startedAt then
+		return --a run is already started
+	end
+
+	self.startedAt = os.clock()
+	self.assembler = player
+	print(player.Name .. " started the run")
+end
+
+-- returns both values to know the caller and how long did run took
+function AssemblyBench.FinishRun(self): (Player?, number?)
+	local startedAt = self.startedAt
+	local assembler = self.assembler
+
+	--resetting before returning sp it cant award twice
+	self.startedAt = nil
+	self.assembler = nil
+
+	-- nil means the run never started
+	if not startedAt then
+		return nil, nil
+	end
+	return assembler, os.clock() - startedAt
+end
+
+function AssemblyBench.AbandonRun(self, player: Player)
+	-- if player leaves mid-run the clock would keep ticking
+	if self.assembler == player then
+		self.startedAt = nil
+		self.assembler = nil
+	end
+end
+
+function AssemblyBench.OnDragStart(self, player: Player, piece: Model)
 	-- clock starts only on an empty bench, so moving pieces around mid-assembly does not restart it
 	if self.occupiedCount == 0 then
-		startStopwatch()
+		self:BeginRun(player)
 	end
 
 	-- if gun piece is still animating, the tween would keep pulling it away from the cursor
@@ -214,11 +221,10 @@ function AssemblyBench.OnDragStart(self, piece: Model)
 end
 
 function AssemblyBench.OnDragContinue(self, piece: Model)
-	self:UpdateHighlights(self:findClosestSlot(piece))
+	self:UpdateHighlights(self:FindClosestSlot(piece))
 end
 
-
-function AssemblyBench.OnDragEnd(self, player: Player, piece: Model)
+function AssemblyBench.OnDragEnd(self, piece: Model)
 	self:UpdateHighlights(nil) -- nothing is about to snap once the mouse is released
 
 	local closestSlot = self:FindClosestSlot(piece)
@@ -235,118 +241,16 @@ function AssemblyBench.OnDragEnd(self, player: Player, piece: Model)
 		return
 	end
 
-	print("Gun assembled correctly")
-	local time = stopAndGetStopwatch()
-	--nil means the run never started so there is nothign to record
-	if time then
-		print(string.format("Gun assembled in %.2f seconds", time))
-		updateBestTime(player, time)
+	local assembler, seconds = self:FinishRun()
+	if assembler and seconds then --nil means the run never started so there is nothign to record
+		print(string.format("%s assembled the gun in %.2f seconds", assembler.Name, seconds))
+		updateBestTime(assembler, seconds)
 	end
 end
 
 
-local function getClosestGunSlot(gunPiece: Model, searchRadius: number): BasePart?
-	--pieces are Model so we use GetPivot to get a cframe
-	local piecePos = gunPiece:GetPivot().Position
-	local closestSlot = nil
-	local closestDistance = searchRadius
-
-	for _, slot in ipairs(slots) do
-		if occupiedSlots[slot] then
-			continue -- we skipping occupied slots
-		end
-
-		local distance = (piecePos - slot.Position).Magnitude -- distance between piece pos and slot pos
-		if distance < closestDistance then -- updating variables if we found slot in radius
-			closestDistance = distance
-			closestSlot = slot
-		end
-	end
-
-	return closestSlot
-end
-
-local slotHighlights: {} = {} -- storing highlight objects for slots
-
-local function onDragStart(gunPiece: Model)
-	if #gunComponents == 0 or #slots == 0 then --safe check if data hasnt initialized yet
-		return
-	end
-
-	if next(occupiedSlots) == nil then -- !!! starting stopwatch again only if bench is empty          ("next" func cuz occupiedSlots is a dict)
-		startStopwatch() --starting time
-	end
-	-- canceling tween if we started to drag a piece which is already tweening
-	local tween = activeGunTweens[gunPiece]
-	if tween then
-		tween:Cancel() -- cancel function also causes Completed event on tweens
-	end
-
-	-- if piece which we started to drag were in slot we free up this slot
-	for slot, occupiedPiece in occupiedSlots do
-		if occupiedPiece == gunPiece then
-			occupiedSlots[slot] = nil
-		end
-	end
-end
-
-local function onDragEnd(player, gunPiece: Model) -- called when gun piece released from mouse
-	if #gunComponents == 0 or #slots == 0 then
-		return
-	end
-
-	for _, highlight in slotHighlights do -- disabling all highlights
-		highlight.Enabled = false
-	end
-
-	local closesSlot = getClosestGunSlot(gunPiece, SNAP_RADIUS)
-
-	if closesSlot then
-		occupiedSlots[closesSlot] = gunPiece --assigning gun piece to closest slot
-
-		local targetCframe = CFrame.new(closesSlot.Position) * gunPiece:GetPivot().Rotation -- keeping the original rotation
-
-		tweenGunPiece(gunPiece, targetCframe + Vector3.new(0, 1.5, 0)) -- slightly above the slot to not overlap with table
-	end
-
-	local currentOccupiedCount = 0 -- tracking ouccpied slots size
-	for _, slot in ipairs(slots) do
-		if occupiedSlots[slot] then
-			currentOccupiedCount += 1
-		end
-	end
-
-	if currentOccupiedCount >= #slots then
-		if verifyAssembly() then
-			print("Gun assembled correctly")
-			local time = stopAndGetStopwatch() -- stopping and saving stopwatch time	
-
-			if time then -- if time is nil it means assembly didnt start yet
-				print(string.format("Gun assembled in %.2f seconds", time)) --rounding second to 2 decimal places
-
-				updateBestTime(player, time) --updating record
-
-			end
-		else
-			print("Gun assembled incorrectly")
-		end
-	end
-end
-
-local function onDragContinue(gunPiece: Model) --called every frame on piece dragging
-	local closestSlot = getClosestGunSlot(gunPiece, SNAP_RADIUS) -- getting closest slto
-
-	for slot, highlight in slotHighlights do
-		if closestSlot == slot then --checking if we are nearby a closest slot
-			highlight.Enabled = true
-		else
-			highlight.Enabled = false
-		end
-	end
-end
-
-local function setupGunComponent( gunPiece: Model)
-	if not gunPiece:GetAttribute("ComponentType") then 
+local function setupGunComponent(assemblyBench, gunPiece: Model)
+	if not gunPiece:GetAttribute("ComponentType") then
 		warn("Gun Component does not have an attribute ComponentType: " .. gunPiece.Name)
 	end
 
@@ -364,22 +268,20 @@ local function setupGunComponent( gunPiece: Model)
 	end
 
 	--setting up drag detector
-
 	dragDetector.ResponseStyle = Enum.DragDetectorResponseStyle.Geometric --- Geometric moves the piece by setting its CFrame so it works with anchored parts
-	
-	dragDetector.DragEnd:Connect(function(player)
-		onDragEnd(player, gunPiece) -- passing player for updating records
+
+	dragDetector.DragEnd:Connect(function()
+		assemblyBench:OnDragEnd(gunPiece)
 	end)
 
-	dragDetector.DragStart:Connect(function() 
-		onDragStart(gunPiece)
+	dragDetector.DragStart:Connect(function(player)
+		assemblyBench:OnDragStart(player, gunPiece)
 	end)
 
-	dragDetector.DragContinue:Connect(function() -- fires every frame of mouse dragging 
-		onDragContinue(gunPiece)
+	dragDetector.DragContinue:Connect(function() -- fires every frame of mouse dragging
+		assemblyBench:OnDragContinue(gunPiece)
 	end)
 end
-
 
 -- collecting gun parts and part slots
 local function setupAllObjects()
@@ -392,14 +294,20 @@ local function setupAllObjects()
 
 	if #slots == 0 then
 		warn("no gun part's slots were founded")
-		return 
+		return
 	end
 
+	local bench = AssemblyBench.new(slots)
+
+	-- connected here because this is the only place that holds a reference to the assembly bench
+	Players.PlayerRemoving:Connect(function(player: Player)
+		bench:AbandonRun(player)
+	end)
 
 	local pieceCount = 0
 	for _, gunPiece in CollectionService:GetTagged(PART_TAG) do --searching gun components by tags too
 		if gunPiece:IsA("Model") then
-			setupGunComponent( gunPiece)
+			setupGunComponent(bench, gunPiece)
 			pieceCount += 1
 		end
 	end
@@ -410,5 +318,3 @@ local function setupAllObjects()
 end
 
 setupAllObjects() -- collecting all objects
-
-
