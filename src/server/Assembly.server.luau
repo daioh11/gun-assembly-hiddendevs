@@ -1,7 +1,8 @@
 -- Connected Discord-GitHub
 
 -- gun assembly script where you drag a gun components in slots
--- despite client logic its a server script for leaderstats working
+-- despite client logic its a server script cuz of data storing 
+-- so i fit it in a single script to avoid modules
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -355,7 +356,7 @@ local function setupGunComponent(assemblyBench, gunPiece: Model)
 	end
 
 	-- anchored pieces cannot fall off the bench or be knocked by physics while dragged
-	for _, part in ipairs(gunPiece:GetDescendants()) do
+	for _, part in gunPiece:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.Anchored = true
 		end
@@ -402,7 +403,7 @@ local function setupAllObjects()
 	-- connected here because this is the only place that holds a reference to the assembly bench
 	Players.PlayerRemoving:Connect(function(player: Player)
 		bench:AbandonRun(player)
-	end)
+	end)	
 
 	local pieceCount = 0
 	for _, gunPiece in CollectionService:GetTagged(PART_TAG) do --searching gun components by tags too
