@@ -6,6 +6,8 @@
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+
 local partsFolder = workspace:WaitForChild("GunParts") :: Folder
 
 local assemblyBench = workspace:WaitForChild("AssemblyBench") :: BasePart
@@ -15,6 +17,11 @@ local slots: { BasePart } = {} -- slots for gun compoaents to snap to
 local occupiedSlots: { [BasePart]: Model } = {} -- slots occupied by snapped gun components
 
 local SNAP_RADIUS: number = 5
+
+--tags for searching objects
+local PART_TAG: string = "GunPart" 
+local SLOT_TAG: string = "GunSlot"	
+
 
 local function verifyAssembly(): boolean--correctness of assembly by checking ComponentType attribute
 	for slot, piece in occupiedSlots do
@@ -255,20 +262,22 @@ end
 
 -- collecting gun parts and part slots
 local function setupAllObjects()
-	for _, gunPiece in partsFolder:GetDescendants() do 
-		if gunPiece:IsA("Model") then--checking type of every gun component
-			print("Found Gun Component: " .. gunPiece.Name)
+	--searching objects by assigned tags, verifying types and saving them in tables
+	for _, gunPiece in CollectionService:GetTagged(PART_TAG) do
+		if gunPiece:IsA("Model") then
 			setupGunComponent(gunPiece)
-			table.insert(gunComponents, gunPiece) --saving them in table
-		end
-	end
-	for _, slot in assemblyBench:GetDescendants() do
-		if slot:IsA("BasePart") then --checking type for slots
-			setupGunSlot(slot)
-			table.insert(slots, slot) -- saving them in table
+			table.insert(gunComponents, gunPiece) 
 		end
 	end
 
+	for _, slot in CollectionService:GetTagged(SLOT_TAG) do
+		if slot:IsA("BasePart") then
+			setupGunSlot(slot)
+			table.insert(slots, slot) 
+		end
+	end
+
+	-- keep your two warn checks for empty tables here, unchanged
 	if #gunComponents == 0 then
 		warn("no gun parts foundd")
 	end
