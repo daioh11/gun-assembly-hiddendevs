@@ -7,7 +7,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 
-local SNAP_RADIUS: number = 5
+local SNAP_RADIUS: number = 3
 
 --tags for searching objects
 local PART_TAG: string = "GunPart"
@@ -81,8 +81,13 @@ AssemblyBench.__index = AssemblyBench -- failed lookups on an object fall throug
 function AssemblyBench.new(slots)
 	local highlights: { [BasePart]: Highlight } = {}
 
+	-- 
+	local filter: { Instance } = {} -- filter for searching slots
+
 	for _, slot in slots do
-		-- anchored and non-collidable so pieces dropped near a slot are not pushed away by it
+		table.insert(filter, slot)
+		
+		-- anchored and non-collidable so pieces doesnt collide with slots
 		slot.Anchored = true
 		slot.CanCollide = false
 
@@ -100,8 +105,15 @@ function AssemblyBench.new(slots)
 		end
 	end
 
+	-- creating OverlapParams with Include filter so it restricts the collisions to slots only
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Include
+	overlapParams.FilterDescendantsInstances = filter
+
 	return setmetatable({ --returning new assembly bench object
 		slots = slots,
+		overlapParams = overlapParams,
+		hovered = {}, -- last slot found for each piece being dragged
 		highlights = highlights,
 		occupied = {},
 		occupiedCount = 0,
@@ -110,18 +122,40 @@ function AssemblyBench.new(slots)
 	}, AssemblyBench)
 end
 
+
+-- distance from a point to the surface of a slot's box
+--center distance is wrong for large slots, a point rihgt above the edge of big slot is far from its center
+local function distanceToSlotSurface(point: Vector3, slot: BasePart): number
+	--slot's local space makes the box axis-aligned even ifslot is rotated in the world 
+	local localPoint = slot.CFrame:PointToObjectSpace(point)
+	local half = slot.Size / 2
+
+	--clamp each axis to the slots half size
+	local clamped = Vector3.new(
+		math.clamp(localPoint.X, -half.X, half.X),
+		math.clamp(localPoint.Y, -half.Y, half.Y),
+		math.clamp(localPoint.Z, -half.Z, half.Z)
+	)
+
+	return (localPoint - clamped).Magnitude
+end
+
 function AssemblyBench.FindClosestSlot(self, piece: Model): BasePart?
 	-- GetPivot works for any Model, even one that has no PrimaryPart set
 	local piecePos = piece:GetPivot().Position
 	local closestSlot: BasePart? = nil --BasePart? cuz no slot may be in range
-	local closestDistance = SNAP_RADIUS -- starting at the radius makes the "in range" check part of the comparison
 
-	for _, slot in self.slots do
+	local closestDistance: number = SNAP_RADIUS -- starting at the snap radius
+
+
+	-- game returns only slots near the piece
+	for _, slot in workspace:GetPartBoundsInRadius(piecePos, SNAP_RADIUS, self.overlapParams) do
 		if self.occupied[slot] then
 			continue -- an occupied slot cannot take a second piece
 		end
-
-		local distance = (piecePos - slot.Position).Magnitude
+		
+		---query only tells us which slot boxes touch the sphere
+		local distance = distanceToSlotSurface(piecePos, slot)
 		if distance < closestDistance then
 			closestDistance = distance
 			closestSlot = slot
@@ -221,14 +255,18 @@ function AssemblyBench.OnDragStart(self, player: Player, piece: Model)
 end
 
 function AssemblyBench.OnDragContinue(self, piece: Model)
-	self:UpdateHighlights(self:FindClosestSlot(piece))
+	local closesSlot = self:FindClosestSlot(piece)
+	self.hovered[piece] = closesSlot --saved so OnDragEnd doesmnt repeat the same query
+	self:UpdateHighlights(closesSlot)
 end
 
 function AssemblyBench.OnDragEnd(self, piece: Model)
-	self:UpdateHighlights(nil) -- nothing is about to snap once the mouse is released
+	self:UpdateHighlights(nil) -- nothing is about to snap once mouse is released
 
-	local closestSlot = self:FindClosestSlot(piece)
-	if closestSlot then
+	local closestSlot = self.hovered[piece]
+	self.hovered[piece] = nil --cleared so stale slot cant be reused on next drag
+
+	if closestSlot and not self.occupied[closestSlot] then
 		self:Snap(piece, closestSlot)
 	end
 
