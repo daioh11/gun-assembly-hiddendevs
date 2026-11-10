@@ -47,4 +47,28 @@ function RecordStore.Save(player: Player, statName: string, newRecord: number): 
 	return false
 end
 
+local function updateBestTime(player, statName, newRecord: number): boolean
+	local leaderstats = player:FindFirstChild("leaderstats") 
+	if not leaderstats then
+		return	-- leaderstats may not exist yet if DataStore stilll loading
+	end
+
+	local bestTimeVal = leaderstats:FindFirstChild("Best Time") --checking for best time
+	if not bestTimeVal then
+		return
+	end
+
+	--scaling rounding scaling back so it rounding to 2 decimal places
+	local rounded = math.round(newTime * 100) / 100
+
+	-- 0 means no record yet
+	if bestTimeVal.Value == 0 or rounded < bestTimeVal.Value then
+		bestTimeVal.Value = rounded
+		print(string.format("New personal record: %.2f sec", rounded))
+
+		--it runs in its own thread to not block the drag handling
+		task.spawn(saveRecord, player, rounded)
+	end
+end
+
 return RecordStore

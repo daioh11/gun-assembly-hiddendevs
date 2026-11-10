@@ -44,97 +44,8 @@ local function tweenGunPiece(piece: Model, targetCFrame: CFrame) -- smooth snapp
 	tween:Play()
 end
 
---data storing logic
 
-local recordStore = DataStoreService:GetDataStore("GunAssemblyRecords")
 
-local function recordKey(player: Player): string
-	--record follows user id
-	return "Player_" .. player.UserId
-end
-
-local function loadRecord(player: Player): number
-	--pcall keeps a failed load from breaking the player's join
-	local ok, stored = pcall(function()
-		return recordStore:GetAsync(recordKey(player))
-	end)
-
-	if ok and typeof(stored) == "number" then
-		return stored
-	end
-	return 0 -- 0means "no record yet"
-end
-
-local function saveRecord(player: Player, seconds: number): boolean
-	for attempt = 1, 3 do -- few attempts for saving just in case
-		local ok = pcall(function()
-			-- updateAsync re-reads the stored value before writing so old server can never overwrite a better time that another server has saved unlike SetAsync
-			recordStore:UpdateAsync(recordKey(player), function(old: number?): number
-				if old and old > 0 and old <= seconds then
-					return old -- stored time is already better
-				end
-				return seconds
-			end)
-		end)
-
-		if ok then
-			return true
-		end
-		task.wait(2 ^ attempt) -- waiting 2, 4, 8 secndos sp retries do not hit same window
-	end
-
-	warn("Could not save record for " .. player.Name)
-	return false
-end
-
-local function setupLeaderstats(player: Player)
-	--creating record in tab menu
-	local leaderstats = Instance.new("Folder")
-	leaderstats.Name = "leaderstats"
-
-	local bestTimeVal = Instance.new("NumberValue")
-	bestTimeVal.Name = "Best Time"
-	-- loadRecord yieldsso it runs before parenting
-	bestTimeVal.Value = loadRecord(player)
-	bestTimeVal.Parent = leaderstats
-
-	if not player.Parent then
-		return --player left while the DataStore requesting
-	end
-	leaderstats.Parent = player
-end
-
-Players.PlayerAdded:Connect(setupLeaderstats)
-
--- players who joined before this script finished coudl never get leaderstats.
---task.spawn because setupLeaderstats yields and mustnt delay next player in loop
-for _, player in Players:GetPlayers() do
-	task.spawn(setupLeaderstats, player)
-end
-
-local function updateBestTime(player, newTime: number) 
-	local leaderstats = player:FindFirstChild("leaderstats") 
-	if not leaderstats then
-		return	-- leaderstats may not exist yet if DataStore stilll loading
-	end
-
-	local bestTimeVal = leaderstats:FindFirstChild("Best Time") --checking for best time
-	if not bestTimeVal then
-		return
-	end
-
-	--scaling rounding scaling back so it rounding to 2 decimal places
-	local rounded = math.round(newTime * 100) / 100
-
-	-- 0 means no record yet
-	if bestTimeVal.Value == 0 or rounded < bestTimeVal.Value then
-		bestTimeVal.Value = rounded
-		print(string.format("New personal record: %.2f sec", rounded))
-
-		--it runs in its own thread to not block the drag handling
-		task.spawn(saveRecord, player, rounded)
-	end
-end
 
 -- ASSEMBlY BENCH
 
@@ -345,7 +256,7 @@ function AssemblyBench.OnDragEnd(self, piece: Model)
 	local assembler, seconds = self:FinishRun()
 	if assembler and seconds then --nil means the run never started so there is nothign to record
 		print(string.format("%s assembled the gun in %.2f seconds", assembler.Name, seconds)) --rounding to 2 decimal; places
-		updateBestTime(assembler, seconds)
+		--updateBestTime(assembler, seconds)
 	end
 end
 
